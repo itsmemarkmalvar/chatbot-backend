@@ -44,5 +44,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('chat')->group(function () {
         Route::get('/history', [ChatController::class, 'history'])->name('chat.history');
         Route::post('/', [ChatController::class, 'store'])->name('chat.store');
+        Route::post('/send', [ChatController::class, 'sendMessage'])->name('chat.send');
+        Route::get('/history', [ChatController::class, 'getHistory'])->name('chat.getHistory');
+        Route::delete('/history', [ChatController::class, 'deleteHistory'])->name('chat.deleteHistory');
     });
 }); 

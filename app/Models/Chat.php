@@ -11,13 +11,19 @@ class Chat extends Model
 
     protected $fillable = [
         'user_id',
+        'provider',
         'message',
         'response',
+        'type',
+        'category',
+        'metadata',
+        'status'
     ];
 
     protected $casts = [
+        'metadata' => 'array',
         'created_at' => 'datetime',
-        'updated_at' => 'datetime',
+        'updated_at' => 'datetime'
     ];
 
     public function user()

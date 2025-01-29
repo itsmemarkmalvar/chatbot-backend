@@ -11,8 +11,13 @@ return new class extends Migration
         Schema::create('chats', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->string('provider');
             $table->text('message');
             $table->text('response')->nullable();
+            $table->string('type')->default('text');
+            $table->string('category')->nullable();
+            $table->json('metadata')->nullable();
+            $table->string('status')->default('pending');
             $table->timestamps();
         });
     }

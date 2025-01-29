@@ -9,9 +9,17 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Log;
+use App\Services\ChatService;
 
 class ChatController extends Controller
 {
+    protected $chatService;
+
+    public function __construct(ChatService $chatService)
+    {
+        $this->chatService = $chatService;
+    }
+
     public function store(Request $request): JsonResponse
     {
         try {
@@ -146,5 +154,89 @@ class ChatController extends Controller
                 'debug_message' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
+    }
+
+    public function sendMessage(Request $request)
+    {
+        try {
+            Log::info('Received chat request', [
+                'user_id' => Auth::id(),
+                'provider' => $request->provider,
+                'category' => $request->category,
+                'message' => $request->message
+            ]);
+
+            $request->validate([
+                'message' => 'required|string',
+                'provider' => 'required|string|in:PLDT,Globe,Converge',
+                'category' => 'nullable|string|in:plans,support,billing,faqs'
+            ]);
+
+            $chat = $this->chatService->processMessage(
+                Auth::id(),
+                $request->message,
+                $request->provider,
+                $request->category ?? null
+            );
+
+            Log::info('Chat processed successfully', [
+                'chat_id' => $chat->id,
+                'type' => $chat->type,
+                'metadata' => $chat->metadata
+            ]);
+
+            $metadata = $chat->metadata ? json_decode($chat->metadata, true) : null;
+
+            return response()->json([
+                'success' => true,
+                'message' => $chat->response,
+                'type' => $chat->type,
+                'content' => $metadata
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Message processing error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request' => $request->all()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to process message',
+                'error' => config('app.debug') ? $e->getMessage() : 'An error occurred'
+            ], 500);
+        }
+    }
+
+    public function getHistory(Request $request)
+    {
+        $chats = Chat::where('user_id', Auth::id())
+            ->when($request->provider, function ($query, $provider) {
+                return $query->where('provider', $provider);
+            })
+            ->orderBy('created_at', 'desc')
+            ->paginate(20);
+
+        return response()->json([
+            'success' => true,
+            'data' => $chats
+        ]);
+    }
+
+    public function deleteHistory(Request $request)
+    {
+        $request->validate([
+            'chat_ids' => 'required|array',
+            'chat_ids.*' => 'exists:chats,id'
+        ]);
+
+        Chat::whereIn('id', $request->chat_ids)
+            ->where('user_id', Auth::id())
+            ->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Chat history deleted successfully'
+        ]);
     }
 } 
