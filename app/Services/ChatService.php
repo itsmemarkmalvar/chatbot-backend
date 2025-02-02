@@ -551,57 +551,37 @@ class ChatService
 
     protected function handleSupportQuery($message, $provider)
     {
-        // Get AI response for support
-        $context = [
-            'query_type' => 'technical_support',
-            'available_steps' => [
-                'Check Physical Connections',
-                'Restart Modem',
-                'Check WiFi Settings',
-                'Speed Test'
-            ]
-        ];
-        
-        $response = $this->geminiService->generateResponse($message, $provider, $context);
-        
-        return [
-            'message' => $response['message'],
-            'type' => 'support',
-            'metadata' => [
-                'steps' => [
-                    [
-                        'title' => 'Check Physical Connections',
-                        'description' => 'Ensure all cables are properly connected.',
-                        'note' => 'Pay special attention to the fiber optic cable.'
-                    ],
-                    [
-                        'title' => 'Restart Your Modem',
-                        'description' => 'Unplug your modem, wait for 30 seconds, then plug it back in.',
-                        'note' => 'Wait up to 2 minutes for full restart.'
-                    ]
-                ]
-            ]
-        ];
+        $context = "You are a technical support specialist for {$provider}. 
+        Provide step-by-step troubleshooting guidance for common internet issues. 
+        Include specific steps for connection problems, speed issues, and service disruptions. 
+        Use clear, simple language and suggest when to contact customer support.";
+
+        $prompt = "Based on this user query about {$provider} technical support: '{$message}', 
+        provide a helpful response that includes:
+        1. Initial diagnostic steps
+        2. Common solutions
+        3. When to contact technical support
+        4. Any relevant self-service tools or resources
+        Format the response in a clear, step-by-step manner.";
+
+        return $this->geminiService->generateResponse($prompt, $context);
     }
 
     protected function handleBillingQuery($message, $provider)
     {
-        // Get AI response for billing
-        $context = [
-            'query_type' => 'billing',
-            'available_actions' => [
-                'Check bill online',
-                'Payment methods',
-                'Billing support contact'
-            ]
-        ];
-        
-        $response = $this->geminiService->generateResponse($message, $provider, $context);
-        
-        return [
-            'message' => $response['message'],
-            'type' => 'text'
-        ];
+        $context = "You are a billing specialist for {$provider}. 
+        Provide detailed information about billing processes, payment methods, and common billing concerns. 
+        Include information about payment deadlines, late fees, and available payment channels.";
+
+        $prompt = "Based on this user query about {$provider} billing: '{$message}', 
+        provide a helpful response that includes:
+        1. Available payment methods
+        2. Billing cycle information
+        3. Common billing FAQs
+        4. Contact information for billing support
+        Make sure to format the response in a clear, organized manner.";
+
+        return $this->geminiService->generateResponse($prompt, $context);
     }
 
     protected function handleFaqQuery($message, $provider)

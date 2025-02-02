@@ -210,33 +210,96 @@ class ChatController extends Controller
 
     public function getHistory(Request $request)
     {
-        $chats = Chat::where('user_id', Auth::id())
-            ->when($request->provider, function ($query, $provider) {
-                return $query->where('provider', $provider);
-            })
-            ->orderBy('created_at', 'desc')
-            ->paginate(20);
+        try {
+            Log::info('Fetching chat history', ['user_id' => Auth::id()]);
 
-        return response()->json([
-            'success' => true,
-            'data' => $chats
-        ]);
+            $query = Chat::where('user_id', Auth::id())
+                ->when($request->provider, function ($query, $provider) {
+                    return $query->where('provider', $provider);
+                })
+                ->when($request->date_from, function ($query, $date) {
+                    return $query->whereDate('created_at', '>=', $date);
+                })
+                ->when($request->date_to, function ($query, $date) {
+                    return $query->whereDate('created_at', '<=', $date);
+                })
+                ->when($request->search, function ($query, $search) {
+                    return $query->where(function ($q) use ($search) {
+                        $q->where('message', 'like', "%{$search}%")
+                          ->orWhere('response', 'like', "%{$search}%");
+                    });
+                })
+                ->orderBy('created_at', 'desc');
+
+            $total = $query->count();
+            $chats = $query->paginate($request->per_page ?? 20);
+
+            Log::info('Chat history retrieved', [
+                'user_id' => Auth::id(),
+                'count' => $chats->count(),
+                'total' => $total
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'chats' => $chats->items(),
+                    'pagination' => [
+                        'current_page' => $chats->currentPage(),
+                        'last_page' => $chats->lastPage(),
+                        'per_page' => $chats->perPage(),
+                        'total' => $total
+                    ]
+                ],
+                'message' => 'Chat history retrieved successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching chat history', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch chat history'
+            ], 500);
+        }
     }
 
     public function deleteHistory(Request $request)
     {
-        $request->validate([
-            'chat_ids' => 'required|array',
-            'chat_ids.*' => 'exists:chats,id'
-        ]);
+        try {
+            $request->validate([
+                'chat_ids' => 'required|array',
+                'chat_ids.*' => 'exists:chats,id'
+            ]);
 
-        Chat::whereIn('id', $request->chat_ids)
-            ->where('user_id', Auth::id())
-            ->delete();
+            $deletedCount = Chat::whereIn('id', $request->chat_ids)
+                ->where('user_id', Auth::id())
+                ->delete();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Chat history deleted successfully'
-        ]);
+            Log::info('Chat history deleted', [
+                'user_id' => Auth::id(),
+                'deleted_count' => $deletedCount
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Chat history deleted successfully',
+                'deleted_count' => $deletedCount
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error deleting chat history', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete chat history'
+            ], 500);
+        }
     }
 } 
