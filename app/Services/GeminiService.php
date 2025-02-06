@@ -10,6 +10,23 @@ class GeminiService
     protected $apiKey;
     protected $baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
     protected $ispData;
+    protected $ispBots = [
+        'PLDT' => [
+            'name' => 'PLDT AINA',
+            'fullName' => 'Advanced Intelligent Network Assistant',
+            'personality' => 'professional and technically knowledgeable'
+        ],
+        'Globe' => [
+            'name' => 'GlobeGuide',
+            'fullName' => 'Your Digital Globe Assistant',
+            'personality' => 'friendly and solution-focused'
+        ],
+        'Converge' => [
+            'name' => 'C-Verse',
+            'fullName' => 'Your Virtual Converge Assistant',
+            'personality' => 'efficient and customer-oriented'
+        ]
+    ];
 
     public function __construct(array $ispData = [])
     {
@@ -17,8 +34,23 @@ class GeminiService
         $this->ispData = $ispData;
     }
 
-    public function generateResponse($message, $provider, $context = [])
+    public function generateResponse($message, $provider)
     {
+        $bot = $this->ispBots[$provider] ?? null;
+        
+        if (!$this->apiKey) {
+            Log::error('Gemini API key not configured');
+            return [
+                'message' => "I'm currently undergoing maintenance. Please try again in a few moments.",
+                'type' => 'text'
+            ];
+        }
+        
+        // Create a context that includes the bot's identity
+        $context = "You are {$bot['name']} ({$bot['fullName']}), a {$bot['personality']} AI assistant for {$provider}. 
+        You specialize in providing customer support for {$provider}'s internet services, plans, and technical issues. 
+        Always maintain a consistent identity as {$bot['name']} and respond in a {$bot['personality']} manner.";
+
         try {
             $prompt = $this->buildPrompt($message, $provider, $context);
             
@@ -42,29 +74,42 @@ class GeminiService
 
             if ($response->successful()) {
                 $result = $response->json();
-                return $this->processGeminiResponse($result);
-            } else {
-                Log::error('Gemini API error', [
-                    'status' => $response->status(),
-                    'response' => $response->json()
-                ]);
-                throw new \Exception('Failed to generate response from Gemini');
+                if (!empty($result['candidates'][0]['content']['parts'][0]['text'])) {
+                    return $this->processGeminiResponse($result);
+                }
             }
+            
+            // If we reach here, there was an issue with the response
+            Log::error('Gemini API error', [
+                'status' => $response->status(),
+                'response' => $response->json()
+            ]);
+            
+            return [
+                'message' => "I'm having a bit of trouble accessing my knowledge base. Let me help you with some basic information instead. What specific details would you like to know about {$provider}?",
+                'type' => 'text'
+            ];
+            
         } catch (\Exception $e) {
             Log::error('Error in Gemini service', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            throw $e;
+            
+            return [
+                'message' => "I apologize for the inconvenience. As {$bot['name']}, I aim to provide accurate information, but I'm experiencing a temporary technical issue. Could you please rephrase your question or try again in a moment?",
+                'type' => 'text'
+            ];
         }
     }
 
     protected function buildPrompt($message, $provider, $context)
     {
+        $bot = $this->ispBots[$provider];
         $providerInfo = $this->ispData[$provider] ?? [];
         
-        $basePrompt = "You are an AI customer service assistant for {$provider}, a leading Internet Service Provider in the Philippines. " .
-            "Provide helpful, accurate, and professional responses based on the following information:\n\n";
+        $basePrompt = "Instructions: You are {$bot['name']} ({$bot['fullName']}), a {$bot['personality']} AI assistant for {$provider}. " .
+            "Always respond in first person as {$bot['name']}. Never mention that you are an AI or assistant directly.\n\n";
 
         // Add provider-specific information
         if (!empty($providerInfo)) {
@@ -81,32 +126,15 @@ class GeminiService
                 $basePrompt .= "- {$plan['name']}: {$speedInfo} at ₱{$plan['price']}/month\n";
             }
             $basePrompt .= "\n";
-
-            if (isset($providerInfo['support_topics'])) {
-                $basePrompt .= "Support Information:\n";
-                foreach ($providerInfo['support_topics'] as $topic => $details) {
-                    $basePrompt .= "- {$topic}\n";
-                }
-                $basePrompt .= "\n";
-            }
         }
 
-        // Add context if available
-        if (!empty($context)) {
-            $basePrompt .= "Context:\n";
-            foreach ($context as $key => $value) {
-                $basePrompt .= "- {$key}: {$value}\n";
-            }
-            $basePrompt .= "\n";
-        }
-
-        $basePrompt .= "Customer Message: {$message}\n\n";
-        $basePrompt .= "Please provide a response that is:\n";
-        $basePrompt .= "1. Relevant to the customer's query\n";
-        $basePrompt .= "2. Specific to {$provider}'s services and plans\n";
-        $basePrompt .= "3. Professional and helpful\n";
-        $basePrompt .= "4. Clear and concise\n\n";
-        $basePrompt .= "Response:";
+        $basePrompt .= "User Message: {$message}\n\n";
+        $basePrompt .= "Response Guidelines:\n";
+        $basePrompt .= "1. Be {$bot['personality']}\n";
+        $basePrompt .= "2. Focus on {$provider} specific information\n";
+        $basePrompt .= "3. Be concise but helpful\n";
+        $basePrompt .= "4. Use natural, conversational language\n\n";
+        $basePrompt .= "Your Response:";
 
         return $basePrompt;
     }
@@ -118,10 +146,17 @@ class GeminiService
         }
 
         $responseText = $result['candidates'][0]['content']['parts'][0]['text'];
-
+        
+        // Clean up the response text
+        $responseText = trim($responseText);
+        
+        // Remove any existing bot name prefix if it exists
+        $responseText = preg_replace('/^(AI|Assistant|Bot):\s*/', '', $responseText);
+        
         return [
             'message' => $responseText,
-            'type' => 'text'
+            'type' => 'text',
+            'success' => true
         ];
     }
 } 

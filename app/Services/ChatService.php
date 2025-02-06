@@ -7,6 +7,21 @@ use Illuminate\Support\Facades\Http;
 
 class ChatService
 {
+    protected $ispBots = [
+        'PLDT' => [
+            'name' => 'PLDT AINA',
+            'fullName' => 'Advanced Intelligent Network Assistant'
+        ],
+        'Globe' => [
+            'name' => 'GlobeGuide',
+            'fullName' => 'Your Digital Globe Assistant'
+        ],
+        'Converge' => [
+            'name' => 'C-Verse',
+            'fullName' => 'Your Virtual Converge Assistant'
+        ]
+    ];
+
     protected $ispData = [
         'PLDT' => [
             'plans' => [
@@ -539,32 +554,43 @@ class ChatService
         }
     }
 
+    protected function getBotName($provider) {
+        return $this->ispBots[$provider]['name'] ?? 'ISP Support Assistant';
+    }
+
+    protected function formatResponse($message, $provider) {
+        $botName = $this->getBotName($provider);
+        // Remove any existing bot name prefix if present
+        $message = preg_replace('/^\*\*[^*]+\*\*:\s*/', '', $message);
+        return "**{$botName}**: {$message}";
+    }
+
     protected function handlePlansQuery($provider)
     {
         $plans = $this->ispData[$provider]['plans'] ?? [];
+        $botName = $this->getBotName($provider);
+        
         return [
-            'message' => "Here are the available plans for $provider",
+            'success' => true,
             'type' => 'plans',
-            'metadata' => json_encode(['plans' => $plans])
+            'message' => "Hello! I'm {$botName}. Here are the available plans for {$provider}:",
+            'content' => [
+                'plans' => $plans
+            ]
         ];
     }
 
     protected function handleSupportQuery($message, $provider)
     {
-        $context = "You are a technical support specialist for {$provider}. 
-        Provide step-by-step troubleshooting guidance for common internet issues. 
-        Include specific steps for connection problems, speed issues, and service disruptions. 
-        Use clear, simple language and suggest when to contact customer support.";
+        $supportTopics = $this->ispData[$provider]['support_topics'] ?? [];
+        $response = $this->processWithAI($message, $provider);
+        $botName = $this->getBotName($provider);
 
-        $prompt = "Based on this user query about {$provider} technical support: '{$message}', 
-        provide a helpful response that includes:
-        1. Initial diagnostic steps
-        2. Common solutions
-        3. When to contact technical support
-        4. Any relevant self-service tools or resources
-        Format the response in a clear, step-by-step manner.";
+        if (isset($response['content']['steps'])) {
+            $response['message'] = "Hi! I'm {$botName}. Here's how I can help you with that:";
+        }
 
-        return $this->geminiService->generateResponse($prompt, $context);
+        return $response;
     }
 
     protected function handleBillingQuery($message, $provider)
@@ -602,6 +628,22 @@ class ChatService
 
     protected function processWithAI($message, $provider)
     {
-        return $this->geminiService->generateResponse($message, $provider);
+        $response = $this->geminiService->generateResponse($message, $provider);
+        
+        // If the response is already formatted with the bot name, return as is
+        if (strpos($response['message'], $this->getBotName($provider)) !== false) {
+            return [
+                'success' => true,
+                'type' => 'text',
+                'message' => $response['message']
+            ];
+        }
+        
+        // Otherwise, format the response with the bot name
+        return [
+            'success' => true,
+            'type' => 'text',
+            'message' => $this->formatResponse($response['message'], $provider)
+        ];
     }
 } 
