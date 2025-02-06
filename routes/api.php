@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ChatController;
+use App\Http\Controllers\UserController;
 
 /*
 |--------------------------------------------------------------------------
@@ -36,6 +37,9 @@ Route::middleware('auth:sanctum')->group(function () {
             'data' => $request->user()
         ]);
     })->name('user.profile');
+
+    // User routes
+    Route::get('/user/info', [UserController::class, 'info']);
 
     // Logout route
     Route::post('/auth/logout', [AuthController::class, 'logout'])->name('auth.logout');

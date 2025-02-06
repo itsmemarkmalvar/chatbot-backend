@@ -34,7 +34,7 @@ class GeminiService
         $this->ispData = $ispData;
     }
 
-    public function generateResponse($message, $provider)
+    public function generateResponse($message, $provider, $userName = null)
     {
         $bot = $this->ispBots[$provider] ?? null;
         
@@ -46,13 +46,14 @@ class GeminiService
             ];
         }
         
-        // Create a context that includes the bot's identity
-        $context = "You are {$bot['name']} ({$bot['fullName']}), a {$bot['personality']} AI assistant for {$provider}. 
-        You specialize in providing customer support for {$provider}'s internet services, plans, and technical issues. 
-        Always maintain a consistent identity as {$bot['name']} and respond in a {$bot['personality']} manner.";
+        // Create a context that includes the bot's identity and user's name
+        $context = "You are {$bot['name']} ({$bot['fullName']}), a {$bot['personality']} AI assistant for {$provider}. " .
+            ($userName ? "You are speaking with {$userName}. Always address them by name occasionally to make the conversation more personal. " : "") .
+            "You specialize in providing customer support for {$provider}'s internet services, plans, and technical issues. " .
+            "Always maintain a consistent identity as {$bot['name']} and respond in a {$bot['personality']} manner.";
 
         try {
-            $prompt = $this->buildPrompt($message, $provider, $context);
+            $prompt = $this->buildPrompt($message, $provider, $context, $userName);
             
             $response = Http::withHeaders([
                 'Content-Type' => 'application/json',
@@ -86,7 +87,9 @@ class GeminiService
             ]);
             
             return [
-                'message' => "I'm having a bit of trouble accessing my knowledge base. Let me help you with some basic information instead. What specific details would you like to know about {$provider}?",
+                'message' => $userName 
+                    ? "I apologize {$userName}, I'm having a bit of trouble accessing my knowledge base. What specific details would you like to know about {$provider}?"
+                    : "I'm having a bit of trouble accessing my knowledge base. What specific details would you like to know about {$provider}?",
                 'type' => 'text'
             ];
             
@@ -97,19 +100,31 @@ class GeminiService
             ]);
             
             return [
-                'message' => "I apologize for the inconvenience. As {$bot['name']}, I aim to provide accurate information, but I'm experiencing a temporary technical issue. Could you please rephrase your question or try again in a moment?",
+                'message' => $userName 
+                    ? "I apologize {$userName}, but I'm experiencing a temporary technical issue. Could you please rephrase your question?"
+                    : "I apologize for the inconvenience, but I'm experiencing a temporary technical issue. Could you please rephrase your question?",
                 'type' => 'text'
             ];
         }
     }
 
-    protected function buildPrompt($message, $provider, $context)
+    protected function buildPrompt($message, $provider, $context, $userName = null)
     {
         $bot = $this->ispBots[$provider];
         $providerInfo = $this->ispData[$provider] ?? [];
         
-        $basePrompt = "Instructions: You are {$bot['name']} ({$bot['fullName']}), a {$bot['personality']} AI assistant for {$provider}. " .
-            "Always respond in first person as {$bot['name']}. Never mention that you are an AI or assistant directly.\n\n";
+        // Enhanced personalization instructions
+        $basePrompt = "Instructions: You are {$bot['name']} ({$bot['fullName']}), a {$bot['personality']} AI assistant for {$provider}.\n\n";
+        
+        if ($userName) {
+            $basePrompt .= "Important: You are speaking with {$userName}. Make your responses personal by:\n";
+            $basePrompt .= "1. Using their name naturally in greetings\n";
+            $basePrompt .= "2. Occasionally mentioning their name mid-conversation to maintain engagement\n";
+            $basePrompt .= "3. Using their name when providing specific recommendations or important information\n";
+            $basePrompt .= "4. Always maintain a friendly yet professional tone\n\n";
+        }
+        
+        $basePrompt .= "Always respond in first person as {$bot['name']}. Never mention that you are an AI or assistant directly.\n\n";
 
         // Add provider-specific information
         if (!empty($providerInfo)) {
@@ -133,8 +148,12 @@ class GeminiService
         $basePrompt .= "1. Be {$bot['personality']}\n";
         $basePrompt .= "2. Focus on {$provider} specific information\n";
         $basePrompt .= "3. Be concise but helpful\n";
-        $basePrompt .= "4. Use natural, conversational language\n\n";
-        $basePrompt .= "Your Response:";
+        $basePrompt .= "4. Use natural, conversational language\n";
+        if ($userName) {
+            $basePrompt .= "5. Address {$userName} by name in a natural way\n";
+            $basePrompt .= "6. Make the response personal but maintain professionalism\n";
+        }
+        $basePrompt .= "\nYour Response:";
 
         return $basePrompt;
     }
@@ -150,8 +169,11 @@ class GeminiService
         // Clean up the response text
         $responseText = trim($responseText);
         
-        // Remove any existing bot name prefix if it exists
+        // Remove any AI/Assistant prefixes
         $responseText = preg_replace('/^(AI|Assistant|Bot):\s*/', '', $responseText);
+        
+        // Ensure the response doesn't start with the bot's name if it's already included
+        $responseText = preg_replace('/^([A-Za-z\s]+):\s*/', '', $responseText);
         
         return [
             'message' => $responseText,
