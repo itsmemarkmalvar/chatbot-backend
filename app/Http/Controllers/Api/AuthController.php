@@ -34,10 +34,14 @@ class AuthController extends Controller
             ], 422);
         }
 
+        $now = now();
         $user = User::create([
             'name' => $request->username,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'first_visit_at' => $now,
+            'last_visit_at' => $now,
+            'visit_count' => 1
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;

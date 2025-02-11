@@ -19,12 +19,19 @@ class UserController extends Controller
                 ], 401);
             }
 
+            // Track this visit
+            $user->trackVisit();
+
             // Return user information
             return response()->json([
                 'success' => true,
                 'name' => $user->name,
                 'email' => $user->email,
-                'username' => $user->username
+                'username' => $user->username,
+                'is_new_user' => $user->isNewUser(),
+                'visit_count' => $user->visit_count,
+                'first_visit_at' => $user->first_visit_at,
+                'last_visit_at' => $user->last_visit_at
             ]);
 
         } catch (\Exception $e) {
