@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Chat;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class ChatService
 {
@@ -501,7 +502,7 @@ class ChatService
 
     public function __construct(GeminiService $geminiService)
     {
-        $this->geminiService = new GeminiService($this->ispData);
+        $this->geminiService = $geminiService;
     }
 
     public function processMessage($userId, $message, $provider, $category = null)
@@ -567,17 +568,39 @@ class ChatService
 
     protected function handlePlansQuery($provider)
     {
-        $plans = $this->ispData[$provider]['plans'] ?? [];
-        $botName = $this->getBotName($provider);
-        
-        return [
-            'success' => true,
-            'type' => 'plans',
-            'message' => "Hello! I'm {$botName}. Here are the available plans for {$provider}:",
-            'content' => [
-                'plans' => $plans
-            ]
-        ];
+        try {
+            Log::info('Handling plans query', [
+                'provider' => $provider
+            ]);
+
+            if (!isset($this->ispData[$provider])) {
+                Log::warning('Provider data not found', ['provider' => $provider]);
+                return [
+                    'type' => 'plans',
+                    'message' => "Here are the available internet plans for {$provider}:",
+                    'content' => null
+                ];
+            }
+
+            $plans = $this->ispData[$provider]['plans'] ?? [];
+            Log::info('Found plans', ['count' => count($plans)]);
+            
+            // Return the plans directly without additional formatting
+            return [
+                'type' => 'plans',
+                'message' => "Here are the available internet plans for {$provider}:",
+                'content' => [
+                    'plans' => $plans
+                ]
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Error in handlePlansQuery', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            throw $e;
+        }
     }
 
     protected function handleSupportQuery($message, $provider)
@@ -595,35 +618,99 @@ class ChatService
 
     protected function handleBillingQuery($message, $provider)
     {
-        $context = "You are a billing specialist for {$provider}. 
-        Provide detailed information about billing processes, payment methods, and common billing concerns. 
-        Include information about payment deadlines, late fees, and available payment channels.";
+        try {
+            Log::info('Handling billing query', [
+                'provider' => $provider,
+                'message' => $message
+            ]);
 
-        $prompt = "Based on this user query about {$provider} billing: '{$message}', 
-        provide a helpful response that includes:
-        1. Available payment methods
-        2. Billing cycle information
-        3. Common billing FAQs
-        4. Contact information for billing support
-        Make sure to format the response in a clear, organized manner.";
+            // Get user info from the auth service
+            $userName = auth()->user()->name ?? null;
 
-        return $this->geminiService->generateResponse($prompt, $context);
+            // Get billing info from provider data
+            $billingInfo = $this->ispData[$provider]['support_topics']['billing_info'] ?? null;
+
+            // Create context with actual provider billing data and user name
+            $context = "You are {$this->getBotName($provider)}, the billing specialist for {$provider}. 
+            The user's name is {$userName}. Always address them by name in your greeting.
+            
+            Use this billing information in your response:
+            - Payment Methods: " . implode(', ', $billingInfo['payment_methods'] ?? []) . "
+            - Billing Cycle: {$billingInfo['billing_cycle']}
+            - Due Date: {$billingInfo['due_date']}
+            
+            Start your response with a friendly greeting using their name.
+            Then provide detailed information about billing processes, payment methods, and billing concerns.
+            Make the response personal and professional.";
+
+            $response = $this->geminiService->generateResponse($message, $provider, $context);
+            
+            return [
+                'success' => true,
+                'type' => 'text',
+                'message' => $this->formatResponse($response['message'], $provider)
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Error in handleBillingQuery', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Get user name even in error case
+            $userName = auth()->user()->name ?? 'there';
+            
+            return [
+                'success' => false,
+                'type' => 'text',
+                'message' => $this->formatResponse(
+                    "Hi {$userName}, I apologize, but I'm having trouble accessing the billing information at the moment. Please try again or contact our customer service for immediate assistance.",
+                    $provider
+                )
+            ];
+        }
     }
 
     protected function handleFaqQuery($message, $provider)
     {
-        // Get AI response for FAQs
-        $context = [
-            'query_type' => 'faq',
-            'provider' => $provider
-        ];
-        
-        $response = $this->geminiService->generateResponse($message, $provider, $context);
-        
-        return [
-            'message' => $response['message'],
-            'type' => 'text'
-        ];
+        try {
+            Log::info('Handling FAQ query', [
+                'provider' => $provider,
+                'message' => $message
+            ]);
+
+            // Create a context for FAQ responses
+            $context = "You are {$this->getBotName($provider)}, the AI assistant for {$provider}. 
+            Provide helpful answers to frequently asked questions about {$provider}'s services.
+            Focus on common inquiries about:
+            1. Service coverage and availability
+            2. Installation process
+            3. Technical support
+            4. Account management
+            5. Service features";
+
+            $response = $this->geminiService->generateResponse($message, $provider, $context);
+            
+            return [
+                'success' => true,
+                'type' => 'text',
+                'message' => $this->formatResponse($response['message'], $provider)
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error in handleFaqQuery', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return [
+                'success' => false,
+                'type' => 'text',
+                'message' => $this->formatResponse(
+                    "I apologize, but I'm having trouble accessing the FAQ information at the moment. Please try asking your question in a different way.",
+                    $provider
+                )
+            ];
+        }
     }
 
     protected function processWithAI($message, $provider)
