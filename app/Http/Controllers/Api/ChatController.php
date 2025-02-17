@@ -185,13 +185,11 @@ class ChatController extends Controller
                 'metadata' => $chat->metadata
             ]);
 
-            $metadata = $chat->metadata ? json_decode($chat->metadata, true) : null;
-
             return response()->json([
                 'success' => true,
                 'message' => $chat->response,
                 'type' => $chat->type,
-                'content' => $metadata
+                'content' => $chat->metadata
             ]);
         } catch (\Exception $e) {
             Log::error('Message processing error', [

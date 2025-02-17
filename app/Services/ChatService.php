@@ -193,6 +193,50 @@ class ChatService
                     'billing_cycle' => 'Monthly billing starts from your installation date',
                     'due_date' => '7 days after bill delivery'
                 ]
+            ],
+            'faqs' => [
+                'categories' => [
+                    [
+                        'id' => 'internet_plans',
+                        'title' => 'Internet Plans',
+                        'questions' => [
+                            'What are the available PLDT Fiber plans?',
+                            'How do I upgrade my current plan?',
+                            'What are the requirements for a new PLDT Fiber subscription?',
+                            'Are there any ongoing promotions or discounts?'
+                        ]
+                    ],
+                    [
+                        'id' => 'technical_support',
+                        'title' => 'Technical Support',
+                        'questions' => [
+                            'Why is my internet connection slow?',
+                            'What should I do if I have no internet connection?',
+                            'How do I reset my PLDT modem?',
+                            'How can I check my internet speed?'
+                        ]
+                    ],
+                    [
+                        'id' => 'billing_payment',
+                        'title' => 'Billing & Payment',
+                        'questions' => [
+                            'What are the available payment methods?',
+                            'When is my monthly due date?',
+                            'How do I view my PLDT bill online?',
+                            'What should I do if my bill is incorrect?'
+                        ]
+                    ],
+                    [
+                        'id' => 'account_management',
+                        'title' => 'Account Management',
+                        'questions' => [
+                            'How do I change my PLDT WiFi password?',
+                            'How can I track my application status?',
+                            'How do I report a service issue?',
+                            'How can I update my account information?'
+                        ]
+                    ]
+                ]
             ]
         ],
         'Globe' => [
@@ -301,6 +345,50 @@ class ChatService
                     ],
                     'billing_cycle' => 'Monthly from activation date',
                     'due_date' => '7 days after bill generation'
+                ]
+            ],
+            'faqs' => [
+                'categories' => [
+                    [
+                        'id' => 'internet_plans',
+                        'title' => 'Internet Plans',
+                        'questions' => [
+                            'What GFiber plans are available in my area?',
+                            'How can I apply for a Globe At Home plan?',
+                            'What are the requirements for Globe Fiber?',
+                            'Are there any ongoing promos for new subscribers?'
+                        ]
+                    ],
+                    [
+                        'id' => 'technical_support',
+                        'title' => 'Technical Support',
+                        'questions' => [
+                            'Why is my Globe internet not working?',
+                            'How do I troubleshoot my Globe modem?',
+                            'How can I improve my internet speed?',
+                            'What do the modem lights mean?'
+                        ]
+                    ],
+                    [
+                        'id' => 'billing_payment',
+                        'title' => 'Billing & Payment',
+                        'questions' => [
+                            'How can I pay my Globe internet bill?',
+                            'When is my bill due?',
+                            'How do I enroll in auto-debit?',
+                            'Where can I view my billing statement?'
+                        ]
+                    ],
+                    [
+                        'id' => 'account_management',
+                        'title' => 'Account Management',
+                        'questions' => [
+                            'How do I change my WiFi password?',
+                            'How can I track my application?',
+                            'How do I upgrade my plan?',
+                            'How do I report a service issue?'
+                        ]
+                    ]
                 ]
             ]
         ],
@@ -494,6 +582,50 @@ class ChatService
                     'billing_cycle' => 'Monthly billing from installation',
                     'due_date' => '7 days from bill date'
                 ]
+            ],
+            'faqs' => [
+                'categories' => [
+                    [
+                        'id' => 'internet_plans',
+                        'title' => 'Internet Plans',
+                        'questions' => [
+                            'What Converge FiberX plans are available?',
+                            'How do I apply for Converge Fiber?',
+                            'What are the installation requirements?',
+                            'Are there any ongoing promotions?'
+                        ]
+                    ],
+                    [
+                        'id' => 'technical_support',
+                        'title' => 'Technical Support',
+                        'questions' => [
+                            'Why is my Converge connection slow?',
+                            'How do I reset my Converge modem?',
+                            'What should I do if I have no internet?',
+                            'How do I check my internet speed?'
+                        ]
+                    ],
+                    [
+                        'id' => 'billing_payment',
+                        'title' => 'Billing & Payment',
+                        'questions' => [
+                            'What are the payment options for Converge?',
+                            'When is my billing due date?',
+                            'How do I view my bill online?',
+                            'How do I dispute a billing issue?'
+                        ]
+                    ],
+                    [
+                        'id' => 'account_management',
+                        'title' => 'Account Management',
+                        'questions' => [
+                            'How do I change my WiFi settings?',
+                            'How can I track my application?',
+                            'How do I report an issue?',
+                            'How do I update my contact details?'
+                        ]
+                    ]
+                ]
             ]
         ]
     ];
@@ -544,7 +676,7 @@ class ChatService
             $chat->update([
                 'response' => $response['message'],
                 'type' => $response['type'] ?? 'text',
-                'metadata' => $response['metadata'] ?? null,
+                'metadata' => $response['content'] ?? null,
                 'status' => 'delivered'
             ]);
 
@@ -674,20 +806,63 @@ class ChatService
     protected function handleFaqQuery($message, $provider)
     {
         try {
-            Log::info('Handling FAQ query', [
-                'provider' => $provider,
-                'message' => $message
-            ]);
+            // If it's an initial FAQ request, return the categories and questions
+            if (strtolower($message) === 'show me faqs for ' . strtolower($provider)) {
+                Log::info('Processing FAQ request', [
+                    'provider' => $provider,
+                    'message' => $message
+                ]);
 
-            // Create a context for FAQ responses
+                // Check if provider exists
+                if (!isset($this->ispData[$provider])) {
+                    Log::warning('Provider not found', ['provider' => $provider]);
+                    return [
+                        'success' => false,
+                        'type' => 'text',
+                        'message' => $this->formatResponse(
+                            "I apologize, but I couldn't find FAQ information for {$provider}.",
+                            $provider
+                        )
+                    ];
+                }
+
+                // Check if FAQs exist for provider
+                if (!isset($this->ispData[$provider]['faqs']['categories'])) {
+                    Log::warning('FAQs not found for provider', ['provider' => $provider]);
+                    return [
+                        'success' => false,
+                        'type' => 'text',
+                        'message' => $this->formatResponse(
+                            "I apologize, but the FAQ information for {$provider} is currently unavailable.",
+                            $provider
+                        )
+                    ];
+                }
+
+                $response = [
+                    'success' => true,
+                    'type' => 'faq_list',
+                    'message' => "Here are the frequently asked questions for {$provider}:",
+                    'content' => [
+                        'categories' => $this->ispData[$provider]['faqs']['categories']
+                    ]
+                ];
+
+                Log::info('FAQ response prepared', [
+                    'response' => $response,
+                    'categories_count' => count($this->ispData[$provider]['faqs']['categories'])
+                ]);
+
+                return $response;
+            }
+
+            // If it's a specific FAQ question, use AI to generate the response
             $context = "You are {$this->getBotName($provider)}, the AI assistant for {$provider}. 
-            Provide helpful answers to frequently asked questions about {$provider}'s services.
-            Focus on common inquiries about:
-            1. Service coverage and availability
-            2. Installation process
-            3. Technical support
-            4. Account management
-            5. Service features";
+            Provide a detailed, helpful answer to the following question about {$provider}'s services.
+            Be specific and accurate in your response.
+            
+            Use this FAQ data for context:
+            " . json_encode($this->ispData[$provider]['faqs'], JSON_PRETTY_PRINT);
 
             $response = $this->geminiService->generateResponse($message, $provider, $context);
             
@@ -706,7 +881,7 @@ class ChatService
                 'success' => false,
                 'type' => 'text',
                 'message' => $this->formatResponse(
-                    "I apologize, but I'm having trouble accessing the FAQ information at the moment. Please try asking your question in a different way.",
+                    "I apologize, but I'm having trouble accessing the FAQ information at the moment. Please try again later.",
                     $provider
                 )
             ];
