@@ -37,7 +37,7 @@ return [
 
     'gemini' => [
         'api_key' => env('GEMINI_API_KEY'),
-        'model' => 'gemini-pro',
+        'model' => 'gemini-1.5-flash',
         'max_tokens' => 1024,
     ],
 

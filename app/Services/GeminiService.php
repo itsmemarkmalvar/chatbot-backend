@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\Log;
 class GeminiService
 {
     protected $apiKey;
-    protected $baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+    protected $model = 'gemini-1.5-flash';
+    protected $baseApiUrl = 'https://generativelanguage.googleapis.com/v1/models/';
     protected $ispData;
     protected $ispBots = [
         'PLDT' => [
@@ -55,9 +56,16 @@ class GeminiService
         try {
             $prompt = $this->buildPrompt($message, $provider, $context, $userName);
             
+            $endpoint = $this->baseApiUrl . $this->model . ':generateContent';
+            
+            Log::info('Calling Gemini API', [
+                'endpoint' => $endpoint,
+                'model' => $this->model
+            ]);
+            
             $response = Http::withHeaders([
                 'Content-Type' => 'application/json',
-            ])->post("{$this->baseUrl}?key={$this->apiKey}", [
+            ])->post("{$endpoint}?key={$this->apiKey}", [
                 'contents' => [
                     [
                         'parts' => [
@@ -113,6 +121,19 @@ class GeminiService
         $bot = $this->ispBots[$provider];
         $providerInfo = $this->ispData[$provider] ?? [];
         
+        // Process context if it's an array to convert it to string
+        if (is_array($context)) {
+            $contextString = '';
+            foreach ($context as $key => $value) {
+                if (is_array($value)) {
+                    $contextString .= "{$key}: " . json_encode($value) . "\n";
+                } else {
+                    $contextString .= "{$key}: {$value}\n";
+                }
+            }
+            $context = $contextString;
+        }
+        
         // Enhanced personalization instructions
         $basePrompt = "Instructions: You are {$bot['name']} ({$bot['fullName']}), a {$bot['personality']} AI assistant for {$provider}.\n\n";
         
@@ -137,8 +158,10 @@ class GeminiService
                     $speedInfo = "{$plan['speed_day']} Mbps (Day) / {$plan['speed_night']} Mbps (Night)";
                 } elseif (isset($plan['speed_peak']) && isset($plan['speed_offpeak'])) {
                     $speedInfo = "{$plan['speed_peak']} Mbps (Peak) / {$plan['speed_offpeak']} Mbps (Off-peak)";
+                } else {
+                    $speedInfo = "Speed information unavailable";
                 }
-                $basePrompt .= "- {$plan['name']}: {$speedInfo} at ₱{$plan['price']}/month\n";
+                $basePrompt .= "- {$plan['name']}: {$speedInfo} at " . (isset($plan['price']) ? "₱{$plan['price']}/month" : "Price unavailable") . "\n";
             }
             $basePrompt .= "\n";
         }
