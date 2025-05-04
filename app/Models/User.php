@@ -24,7 +24,8 @@ class User extends Authenticatable
         'password',
         'first_visit_at',
         'last_visit_at',
-        'visit_count'
+        'visit_count',
+        'shows_tour'
     ];
 
     /**
@@ -49,12 +50,15 @@ class User extends Authenticatable
             'password' => 'hashed',
             'first_visit_at' => 'datetime',
             'last_visit_at' => 'datetime',
+            'shows_tour' => 'boolean',
         ];
     }
 
     public function isNewUser(): bool
     {
-        return $this->visit_count <= 1;
+        // Only consider a user new if they have the shows_tour flag set to true
+        // This will be set during registration but not during login
+        return (bool) $this->shows_tour;
     }
 
     public function initializeFirstVisit(): void
@@ -82,12 +86,15 @@ class User extends Authenticatable
             return;
         }
 
-        // Only increment if last visit was on a different day
-        if ($this->last_visit_at->format('Y-m-d') !== $now->format('Y-m-d')) {
-            $this->visit_count++;
-        }
-        
+        // Always increment the visit count on login
+        $this->visit_count++;
         $this->last_visit_at = $now;
+        $this->save();
+    }
+
+    public function markTourShown(): void
+    {
+        $this->shows_tour = false;
         $this->save();
     }
 }

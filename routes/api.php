@@ -40,6 +40,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // User routes
     Route::get('/user/info', [UserController::class, 'info']);
+    Route::post('/user/tour-completed', [UserController::class, 'markTourShown']);
 
     // Logout route
     Route::post('/auth/logout', [AuthController::class, 'logout'])->name('auth.logout');

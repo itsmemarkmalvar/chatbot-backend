@@ -31,12 +31,38 @@ class UserController extends Controller
                 'is_new_user' => $user->isNewUser(),
                 'visit_count' => $user->visit_count,
                 'first_visit_at' => $user->first_visit_at,
-                'last_visit_at' => $user->last_visit_at
+                'last_visit_at' => $user->last_visit_at,
+                'shows_tour' => $user->shows_tour
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'Failed to fetch user information'
+            ], 500);
+        }
+    }
+    
+    public function markTourShown(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            
+            if (!$user) {
+                return response()->json([
+                    'error' => 'User not authenticated'
+                ], 401);
+            }
+            
+            $user->markTourShown();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Tour marked as shown'
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Failed to update tour status'
             ], 500);
         }
     }

@@ -34,23 +34,37 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $now = now();
-        $user = User::create([
-            'name' => $request->username,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'first_visit_at' => $now,
-            'last_visit_at' => $now,
-            'visit_count' => 1
-        ]);
+        try {
+            $now = now();
+            $user = User::create([
+                'name' => $request->username,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+                'first_visit_at' => $now,
+                'last_visit_at' => $now,
+                'visit_count' => 1,
+                'shows_tour' => true
+            ]);
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+            $token = $user->createToken('auth_token')->plainTextToken;
 
-        return response()->json([
-            'message' => 'Registration successful',
-            'user' => $user,
-            'token' => $token,
-        ], 201);
+            return response()->json([
+                'success' => true,
+                'message' => 'Registration successful',
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email
+                ],
+                'token' => $token,
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Registration failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
